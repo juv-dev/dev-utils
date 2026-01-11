@@ -1,54 +1,80 @@
-name: Create Version
+name: C
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 
 jobs:
   bump-version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
-    # Evita bucles de versionado
-    if: "!contains(github.event.head_commit.message, 'feat(main): version v')"
-
+      pull-requests: write
     steps:
-      - name: Checkout repository
+      - name: Check if merged to main
+        if: github.event.pull_request.merged == false
+        run: |
+          echo "Skipping: This PR was not merged"
+          exit 78  # Neutral exit code to skip the workflow
+
+      - name: Check if merged from develop
+        run: |
+          if [[ "${{ github.event.pull_request.base.ref }}" != "main" || "${{ github.event.pull_request.head.ref }}" != "develop" ]]; then
+            echo "Skipping: Only merges from develop to main trigger version bump"
+            exit 78  # Neutral exit code to skip the workflow
+          fi
+
+      - name: Ensure PR context
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "::error::This workflow must be called from a pull_request context"
+            exit 1
+          fi
+          echo "Running in PR context for #${{ github.event.pull_request.number }}"
+
+      - name: Checkout PR head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      - name: Obtener commits
-        id: commits
+      - name: Determine bump type from PR commits
+        id: bump
         uses: actions/github-script@v7
         with:
           script: |
-            const commits = context.payload.commits || [];
-            if (commits.length === 0) {
-              console.log('No hay commits para procesar');
-              return { hasFeat: false, hasBreaking: false };
-            }
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
 
-            const messages = commits.map(c => c.message);
-            const hasFeat = messages.some(m => /^feat(\(.+\))?:/i.test(m));
-            const hasBreaking = messages.some(m => /!:/i.test(m));
-            
-            console.log(`Tiene features: ${hasFeat}, Tiene breaking changes: ${hasBreaking}`);
-            return { hasFeat, hasBreaking };
+            const types = commits.data.map(commit => {
+              const match = commit.commit.message.match(/^(feat|fix|refactor|chore|docs|style|test)(\([a-z-]+\))?!?:/i);
+              return match ? match[1].toLowerCase() : null;
+            }).filter(Boolean);
 
-      - name: Actualizar versión
-        if: steps.commits.outputs.hasFeat == 'true' || steps.commits.outputs.hasBreaking == 'true'
+            let bump = 'patch';
+            if (types.some(t => t === 'feat')) bump = 'minor';
+            if (types.some(t => t.endsWith('!'))) bump = 'major';
+
+            return { bump };
+
+      - name: Bump version
+        id: version
         run: |
-          # Obtener versión actual
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT_VERSION}"
+          if [ ! -f package.json ]; then
+            echo "::error::package.json not found"
+            exit 1
+          fi
 
           # Determinar tipo de bump
           if [ "${{ steps.commits.outputs.hasBreaking }}" = "true" ]; then
@@ -65,10 +91,27 @@ jobs:
             PATCH=$((PATCH + 1))
           fi
 
-          NUEVA_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "Actualizando de $CURRENT_VERSION a $NUEVA_VERSION"
+          case "${{ steps.bump.outputs.bump }}" in
+            major) 
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            *)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
 
-          # Actualizar package.json
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid version components: $MAJOR.$MINOR.$PATCH"
+            exit 1
+          fi
+
+          NEW="$MAJOR.$MINOR.$PATCH"
           node -e "
             const fs = require('fs')
             const p = require('./package.json')
@@ -76,13 +119,29 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
           "
 
-          # Configurar git
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          
-          # Hacer commit y push directamente a main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add package.json
-          git commit -m "feat(main): version v$NUEVA_VERSION [skip ci]"
-          git push origin main
+          git commit -m "chore: bump version to v$NEW [skip ci]"
+          if ! git push origin HEAD:main; then
+            echo "::error::Failed to push version bump commit to main"
+            exit 1
+          fi
+          
+          echo "Version bumped to v$NEW and pushed to main"
+
+          echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
+          echo "VERSION=$NEW" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          release_name: Release v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## What's Changed
+            - Version bump to v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
