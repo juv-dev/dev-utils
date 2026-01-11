@@ -6,17 +6,19 @@ on:
       - main
 
 jobs:
-  bump-version:
+  create-version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+
     steps:
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -33,7 +35,6 @@ jobs:
       - name: Determine bump type
         id: bump
         run: |
-          # Analizar los mensajes para determinar el tipo de bump
           if echo "${{ steps.commits.outputs.messages }}" | grep -q '!:' ; then
             echo "bump=major" >> $GITHUB_OUTPUT
           elif echo "${{ steps.commits.outputs.messages }}" | grep -q '^feat' ; then
@@ -76,28 +77,31 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
           "
 
-          # Configurar Git
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          
-          # Hacer commit de los cambios
           git add package.json
-          git commit -m "chore: bump version to v$NEW [skip ci]"
-          
-          # Hacer push a la rama main
+          git commit -m "feat: bump version to v$NEW [skip ci]"
           git push origin main
 
           echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
 
-      - name: Create Release
-        uses: actions/create-release@v1
+      - name: Create version bump comment
+        if: github.event_name == 'pull_request'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ env.NEW_VERSION }}
+        uses: actions/github-script@v7
         with:
-          tag_name: v${{ env.NEW_VERSION }}
-          release_name: Release v${{ env.NEW_VERSION }}
-          body: |
-            ## What's Changed
-            - Version bump to v${{ env.NEW_VERSION }}
-          draft: false
-          prerelease: false
+          script: |
+            // Verificar si NEW_VERSION está disponible
+            if (!process.env.NEW_VERSION) {
+              console.log('NEW_VERSION not available, skipping comment');
+              return;
+            }
+            
+            // Crear comentario en el PR
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Version bumped to v${process.env.NEW_VERSION}`
+            });
