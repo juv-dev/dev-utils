@@ -1,0 +1,28 @@
+name: Deploy Project
+
+on:
+  workflow_run:
+    workflows: ["Create Version"]
+    types: 
+      - completed
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        run: echo "version=$(node -p 'require("./package.json").version')" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: get-version
+    uses: juv-dev/workflows-frontend/.github/workflows/deploy-project.yml@main
+    with:
+      version: ${{ needs.get-version.outputs.version }}

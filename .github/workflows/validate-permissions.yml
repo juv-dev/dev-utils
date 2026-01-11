@@ -1,0 +1,11 @@
+name: Validate Permissions
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  validate-branch:
+    uses: juv-dev/workflows-frontend/.github/workflows/validate-branch.yml@main
+    with:
+      allowed_branches: "main,develop"
