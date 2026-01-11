@@ -1,6 +1,10 @@
 name: Delete Branch After Merge
 
 on:
+  workflow_run:
+    workflows: ["Create Release"]
+    types: 
+      - completed
   pull_request:
     types: [closed]
 
@@ -10,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Delete branch
+      - name: Delete branch (except develop)
+        if: github.event.pull_request.head.ref != 'refs/heads/develop'
         uses: dawidd6/action-delete-branch@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -2,7 +2,7 @@ name: Load Values
 
 on:
   workflow_run:
-    workflows: ["Check PR Title"]
+    workflows: ["Validate Permissions"]
     types: 
       - completed
   pull_request:
