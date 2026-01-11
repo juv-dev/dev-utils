@@ -1,0 +1,12 @@
+name: Create Version
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  bump-version:
+    uses: juv-dev/workflows-frontend/.github/workflows/create-version.yml@main
+    with:
+      ref: ${{ github.event.pull_request.head.ref }}

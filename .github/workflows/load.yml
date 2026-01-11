@@ -1,0 +1,13 @@
+name: Load Values
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  load-values:
+    uses: juv-dev/workflows-frontend/.github/workflows/load-env.yml@main
+    with:
+      environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}

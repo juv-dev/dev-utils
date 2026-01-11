@@ -1,0 +1,17 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  security:
+    uses: juv-dev/workflows-frontend/.github/workflows/snyk-security.yml@main
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    with:
+      node-version: '20'
+      severity: 'high'
