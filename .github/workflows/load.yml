@@ -1,6 +1,10 @@
 name: Load Values
 
 on:
+  workflow_run:
+    workflows: ["Check PR Title"]
+    types: 
+      - completed
   pull_request:
     branches: [main, develop]
   push:
@@ -8,6 +12,7 @@ on:
 
 jobs:
   load-values:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     uses: juv-dev/workflows-frontend/.github/workflows/load-env.yml@main
     with:
       environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}

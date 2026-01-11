@@ -1,6 +1,10 @@
 name: Deploy Project
 
 on:
+  workflow_run:
+    workflows: ["Create Version"]
+    types: 
+      - completed
   push:
     branches: [main]
     paths:

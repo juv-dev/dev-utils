@@ -1,12 +1,17 @@
 name: Create Version
 
 on:
+  workflow_run:
+    workflows: ["Build Project"]
+    types: 
+      - completed
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main]
 
 jobs:
   bump-version:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     uses: juv-dev/workflows-frontend/.github/workflows/create-version.yml@main
     with:
       ref: ${{ github.event.pull_request.head.ref }}
