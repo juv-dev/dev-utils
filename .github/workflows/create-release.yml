@@ -1,6 +1,10 @@
 name: Create Release
 
 on:
+  workflow_run:
+    workflows: ["Create Tag"]
+    types: 
+      - completed
   push:
     tags:
       - 'v*'
