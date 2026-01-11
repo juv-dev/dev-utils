@@ -1,46 +1,50 @@
 name: Create Version
 
 on:
-  workflow_run:
-    workflows: ["Build Project"]
-    types: 
-      - completed
   push:
     branches:
       - main
 
 jobs:
-  bump-version:
+  create-version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+          persist-credentials: true
 
-      - name: Determine bump type from commits
-        id: bump
-        uses: actions/github-script@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          script: |
-            const commits = context.payload.commits || [];
-            const messages = commits.map(c => c.message);
-            
-            let bump = 'patch';
-            if (messages.some(m => /^feat(\(.+\))?:/i.test(m))) {
-              bump = 'minor';
-            }
-            if (messages.some(m => /!:/i.test(m))) {
-              bump = 'major';
-            }
-            core.setOutput('bump', bump);
+          node-version: '20'
 
-      - name: Bump version in package.json
-        id: bump_version
+      - name: Get commit messages
+        id: commits
+        run: |
+          # Obtener los mensajes de los últimos 10 commits
+          MESSAGES=$(git log -10 --pretty=format:"%s")
+          echo "messages=$MESSAGES" >> $GITHUB_OUTPUT
+
+      - name: Determine bump type
+        id: bump
+        run: |
+          if echo "${{ steps.commits.outputs.messages }}" | grep -q '!:' ; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+          elif echo "${{ steps.commits.outputs.messages }}" | grep -q '^feat' ; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        id: version
         run: |
           if [ ! -f package.json ]; then
             echo "package.json not found"
@@ -51,7 +55,7 @@ jobs:
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
           case "${{ steps.bump.outputs.bump }}" in
-            "major")
+            "major") 
               MAJOR=$((MAJOR + 1))
               MINOR=0
               PATCH=0
@@ -66,8 +70,6 @@ jobs:
           esac
 
           NEW="$MAJOR.$MINOR.$PATCH"
-          echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
-          
           node -e "
             const fs = require('fs')
             const p = require('./package.json')
@@ -75,13 +77,31 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
           "
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json
+          git commit -m "feat: bump version to v$NEW [skip ci]"
+          git push origin main
+
+          echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
+
+      - name: Create version bump comment
+        if: github.event_name == 'pull_request'
+        env:
+          NEW_VERSION: ${{ env.NEW_VERSION }}
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "feat(main): bump version to v${{ env.NEW_VERSION }}"
-          title: "feat(main): bump version to v${{ env.NEW_VERSION }}"
-          body: "Automatic version bump to v${{ env.NEW_VERSION }}"
-          branch: "bump-version-${{ github.run_id }}"
-          delete-branch: true
-          base: main
+          script: |
+            // Verificar si NEW_VERSION está disponible
+            if (!process.env.NEW_VERSION) {
+              console.log('NEW_VERSION not available, skipping comment');
+              return;
+            }
+            
+            // Crear comentario en el PR
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Version bumped to v${process.env.NEW_VERSION}`
+            });
