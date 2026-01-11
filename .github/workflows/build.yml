@@ -1,0 +1,20 @@
+name: Build Project
+
+on:
+  workflow_run:
+    workflows: ["Security Scan"]
+    types: 
+      - completed
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    uses: juv-dev/workflows-frontend/.github/workflows/build-project.yml@main
+    with:
+      node_version: '20'
+      create_env: true

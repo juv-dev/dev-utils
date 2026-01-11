@@ -1,0 +1,22 @@
+name: Security Scan
+
+on:
+  workflow_run:
+    workflows: ["Load Values"]
+    types: 
+      - completed
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  security:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    uses: juv-dev/workflows-frontend/.github/workflows/snyk-security.yml@main
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    with:
+      node-version: '20'
+      severity: 'high'
