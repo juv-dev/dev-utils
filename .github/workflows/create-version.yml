@@ -1,20 +1,17 @@
 name: Create Version
 
 on:
-  workflow_run:
-    workflows: ["Build Project"]
-    types: 
-      - completed
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   bump-version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
+    
+    # Evita bucles de versionado
+    if: "!contains(github.event.head_commit.message, 'feat(main): version v')"
 
     steps:
       - name: Checkout repository
@@ -22,66 +19,70 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine bump type from commits
-        id: bump
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Obtener commits
+        id: commits
         uses: actions/github-script@v7
         with:
           script: |
             const commits = context.payload.commits || [];
-            const messages = commits.map(c => c.message);
-            
-            let bump = 'patch';
-            if (messages.some(m => /^feat(\(.+\))?:/i.test(m))) {
-              bump = 'minor';
+            if (commits.length === 0) {
+              console.log('No hay commits para procesar');
+              return { hasFeat: false, hasBreaking: false };
             }
-            if (messages.some(m => /!:/i.test(m))) {
-              bump = 'major';
-            }
-            core.setOutput('bump', bump);
 
-      - name: Bump version in package.json
-        id: bump_version
+            const messages = commits.map(c => c.message);
+            const hasFeat = messages.some(m => /^feat(\(.+\))?:/i.test(m));
+            const hasBreaking = messages.some(m => /!:/i.test(m));
+            
+            console.log(`Tiene features: ${hasFeat}, Tiene breaking changes: ${hasBreaking}`);
+            return { hasFeat, hasBreaking };
+
+      - name: Actualizar versión
+        if: steps.commits.outputs.hasFeat == 'true' || steps.commits.outputs.hasBreaking == 'true'
         run: |
-          if [ ! -f package.json ]; then
-            echo "package.json not found"
-            exit 1
+          # Obtener versión actual
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT_VERSION}"
+
+          # Determinar tipo de bump
+          if [ "${{ steps.commits.outputs.hasBreaking }}" = "true" ]; then
+            echo "Incrementando versión MAJOR"
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "${{ steps.commits.outputs.hasFeat }}" = "true" ]; then
+            echo "Incrementando versión MINOR"
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            echo "Incrementando versión PATCH"
+            PATCH=$((PATCH + 1))
           fi
 
-          CURRENT=$(node -p "require('./package.json').version")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NUEVA_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "Actualizando de $CURRENT_VERSION a $NUEVA_VERSION"
 
-          case "${{ steps.bump.outputs.bump }}" in
-            "major")
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            "minor")
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            *)
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
-
-          NEW="$MAJOR.$MINOR.$PATCH"
-          echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
-          
+          # Actualizar package.json
           node -e "
             const fs = require('fs')
             const p = require('./package.json')
-            p.version = '$NEW'
+            p.version = '$NUEVA_VERSION'
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
           "
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "feat(main): bump version to v${{ env.NEW_VERSION }}"
-          title: "feat(main): bump version to v${{ env.NEW_VERSION }}"
-          body: "Automatic version bump to v${{ env.NEW_VERSION }}"
-          branch: "bump-version-${{ github.run_id }}"
-          delete-branch: true
-          base: main
+          # Configurar git
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          
+          # Hacer commit y push directamente a main
+          git add package.json
+          git commit -m "feat(main): version v$NUEVA_VERSION [skip ci]"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
