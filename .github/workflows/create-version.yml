@@ -1,46 +1,55 @@
 name: Create Version
 
 on:
-  workflow_run:
-    workflows: ["Build Project"]
-    types: 
-      - completed
-  push:
-    branches:
-      - main
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 jobs:
   bump-version:
+    # Evitar que se ejecute en ramas bump-version-*
+    if: "!startsWith(github.head_ref, 'bump-version-')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout PR head
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
+          persist-credentials: true
 
-      - name: Determine bump type from commits
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Determine bump type from PR commits
         id: bump
         uses: actions/github-script@v7
         with:
           script: |
-            const commits = context.payload.commits || [];
-            const messages = commits.map(c => c.message);
-            
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const types = commits.data.map(commit => {
+              const match = commit.commit.message.match(/^(feat|fix)(\([a-z-]+\))?(!)?:/i);
+              return match ? match[1].toLowerCase() + (match[3] ?? '') : null;
+            }).filter(Boolean);
+
             let bump = 'patch';
-            if (messages.some(m => /^feat(\(.+\))?:/i.test(m))) {
-              bump = 'minor';
-            }
-            if (messages.some(m => /!:/i.test(m))) {
-              bump = 'major';
-            }
+            if (types.some(t => t === 'feat')) bump = 'minor';
+            if (types.some(t => t.includes('!'))) bump = 'major';
+
             core.setOutput('bump', bump);
 
-      - name: Bump version in package.json
-        id: bump_version
+      - name: Bump version
         run: |
           if [ ! -f package.json ]; then
             echo "package.json not found"
@@ -66,8 +75,7 @@ jobs:
           esac
 
           NEW="$MAJOR.$MINOR.$PATCH"
-          echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
-          
+
           node -e "
             const fs = require('fs')
             const p = require('./package.json')
@@ -75,13 +83,21 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n')
           "
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json
+          git commit -m "feat(main): bump version to v$NEW"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+
+          echo "NEW_VERSION=$NEW" >> $GITHUB_ENV
+
+      - name: Comment version bump in PR
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "feat(main): bump version to v${{ env.NEW_VERSION }}"
-          title: "feat(main): bump version to v${{ env.NEW_VERSION }}"
-          body: "Automatic version bump to v${{ env.NEW_VERSION }}"
-          branch: "bump-version-${{ github.run_id }}"
-          delete-branch: true
-          base: main
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔖 Versión actualizada a **v${process.env.NEW_VERSION}**`
+            })
