@@ -25,7 +25,7 @@ vi.mock('child_process', () => ({
 }));
 
 vi.mock('process', () => ({
-  cwd: vi.fn(() => '/mock/root'),
+  cwd: vi.fn(() => '/home/runner/work/dev-utils/dev-utils'),
   argv: ['node', 'build-all.ts'],
 }));
 
@@ -73,7 +73,7 @@ describe('buildAllProjects', () => {
     buildAllProjects();
     
     expect(mockFs.default.mkdirSync).toHaveBeenCalledWith(
-      'C:\\Developers\\Github\\dev-utils\\dist',
+      '/home/runner/work/dev-utils/dev-utils/dist',
       { recursive: true }
     );
   });
@@ -81,10 +81,10 @@ describe('buildAllProjects', () => {
   it('should use custom output path when provided', () => {
     (mockFs as any).default.readdirSync.mockReturnValue([]);
     
-    buildAllProjects({ outputPath: 'C:\\custom\\output' });
+    buildAllProjects({ outputPath: '/custom/output' });
     
     expect(mockFs.default.mkdirSync).toHaveBeenCalledWith(
-      'C:\\custom\\output',
+      '/custom/output',
       { recursive: true }
     );
   });
@@ -103,7 +103,7 @@ describe('buildAllProjects', () => {
     
     expect(mockExecSync).toHaveBeenCalledTimes(1);
     expect(mockExecSync).toHaveBeenCalledWith('pnpm run build', {
-      cwd: 'C:\\Developers\\Github\\dev-utils\\project1',
+      cwd: '/home/runner/work/dev-utils/dev-utils/project1',
       stdio: 'inherit',
     });
   });
@@ -143,8 +143,8 @@ describe('buildAllProjects', () => {
     
     expect(mockFs.default.cpSync).toHaveBeenCalledTimes(2);
     expect(mockFs.default.cpSync).toHaveBeenCalledWith(
-      'C:\\Developers\\Github\\dev-utils\\project1\\dist',
-      'C:\\Developers\\Github\\dev-utils\\dist\\project1\\dist',
+      '/home/runner/work/dev-utils/dev-utils/project1/dist',
+      '/home/runner/work/dev-utils/dev-utils/dist/project1/dist',
       { recursive: true }
     );
   });
@@ -160,7 +160,7 @@ describe('buildAllProjects', () => {
     buildAllProjects();
     
     expect(mockFs.default.mkdirSync).toHaveBeenCalledWith(
-      'C:\\Developers\\Github\\dev-utils\\dist\\project1',
+      '/home/runner/work/dev-utils/dev-utils/dist/project1',
       { recursive: true }
     );
   });
