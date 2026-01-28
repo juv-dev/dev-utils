@@ -1,0 +1,85 @@
+name: PR - Frontend Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.28.2'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      
+      - name: Pruebas unitarias con coverage
+        env:
+          NODE_ENV: test
+          VITE_API_URL: ${{ secrets.API_URL }}
+        run: pnpm test:coverage
+      
+      - name: Verificar coverage mínimo
+        run: |
+          echo "🔍 Checking for coverage files..."
+          ls -la coverage/ || echo "No coverage directory found"
+          
+          if [ -f "coverage/coverage-summary.json" ]; then
+            COVERAGE=$(cat coverage/coverage-summary.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          elif [ -f "coverage/coverage.json" ]; then
+            COVERAGE=$(cat coverage/coverage.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          else
+            echo "⚠️ No coverage summary file found, checking console output..."
+            COVERAGE=$(pnpm test:coverage 2>&1 | grep -o 'lines.*[0-9.]*%' | grep -o '[0-9.]*' | head -1 || echo "0")
+          fi
+          
+          echo "📊 Coverage actual: $COVERAGE%"
+          
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Coverage $COVERAGE% es menor al 80% requerido"
+            echo "📋 Available coverage files:"
+            find coverage/ -name "*.json" -o -name "*.txt" 2>/dev/null || echo "No coverage files found"
+            exit 1
+          fi
+          
+          echo "✅ Coverage $COVERAGE% cumple con el mínimo requerido"
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: vars.UPLOAD_COVERAGE == 'true'
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+      
+      - name: Reporte para PR
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const coverage = process.env.COVERAGE;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧪 Reporte de Tests (Frontend)\n\n✅ **Tests unitarios pasados**\n📊 **Coverage:** ${coverage}%\n\n🎯 **Estado:** Cumple con el mínimo del 80% requerido`
+            });

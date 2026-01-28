@@ -1,0 +1,47 @@
+name: PR - Frontend Setup
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.28.2'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      
+      - name: Cargar variables de entorno
+        env:
+          NODE_ENV: test
+          VITE_API_URL: ${{ secrets.API_URL }}
+        run: |
+          echo "NODE_ENV=$NODE_ENV" >> $GITHUB_ENV
+          echo "VITE_API_URL=$VITE_API_URL" >> $GITHUB_ENV
+      
+      - name: Validar configuración
+        run: |
+          echo "🔍 Validando configuración del frontend..."
+          if [ ! -f package.json ]; then
+            echo "❌ package.json no encontrado"
+            exit 1
+          fi
+          
+          if [ ! -f "src/main.ts" ] && [ ! -f "src/main.jsx" ]; then
+            echo "⚠️ Archivo principal no encontrado"
+          fi

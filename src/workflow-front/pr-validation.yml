@@ -1,0 +1,66 @@
+name: PR - Frontend Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Validar etiquetas del PR
+        uses: actions/github-script@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            
+            const labels = pr.labels.map(label => label.name);
+            console.log('🏷️ Labels encontradas:', labels);
+            
+            const requiredLabels = ['feature', 'fix', 'hotfix', 'docs', 'style', 'refactor', 'test', 'chore'];
+            const hasRequiredLabel = labels.some(label => requiredLabels.includes(label));
+            
+            if (!hasRequiredLabel) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `## 🏷️ Validación de Etiquetas (Frontend)\n\n❌ **Error:** El PR necesita al menos una de estas etiquetas:\n\n${requiredLabels.map(label => `- \`${label}\``).join('\n')}\n\nPor favor, agrega la etiqueta apropiada para continuar.`
+              });
+              process.exit(1);
+            }
+            
+            const title = pr.title;
+            const isFeatureOrFix = labels.some(label => ['feature', 'fix', 'hotfix'].includes(label));
+            
+            if (isFeatureOrFix) {
+              const conventionalCommitRegex = /^(feat|fix|hotfix)(\(.+\))?: .+/;
+              if (!conventionalCommitRegex.test(title)) {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: `## 📝 Formato de Título (Frontend)\n\n❌ **Error:** El título debe seguir el formato de Conventional Commits:\n\n\`feat: descripción del cambio\`\n\`fix(componente): descripción del cambio\`\n\`hotfix: descripción urgente\`\n\n**Título actual:** \`${title}\`\n\nPor favor, ajusta el título del PR.`
+                });
+                process.exit(1);
+              }
+            }
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ Validación Completada (Frontend)\n\n🏷️ **Etiquetas:** ${labels.join(', ')}\n📝 **Título:** ${pr.title}\n\n🎯 **Estado:** Todo está en orden para continuar con los checks.`
+            });

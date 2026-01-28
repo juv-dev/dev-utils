@@ -1,8 +1,15 @@
+// build-all.ts
 import fs from 'fs'
 import path from 'path' 
 import { execSync } from 'child_process'
 
-export function buildAllProjects(options = {}) {
+interface BuildOptions {
+  root?: string
+  outputPath?: string
+  skipDirs?: string[]
+}
+
+export function buildAllProjects(options: BuildOptions = {}): void {
   const {
     root = process.cwd(),
     outputPath = path.join(root, 'dist'),
@@ -27,7 +34,7 @@ export function buildAllProjects(options = {}) {
           stdio: 'inherit'
         })
         console.log(`✅ Built: ${entry.name}`)
-      } catch (error) {
+      } catch (error: any) {
         console.error(`❌ Failed to build ${entry.name}:`, error.message)
         continue 
       }
