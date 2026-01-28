@@ -1,0 +1,91 @@
+name: PR - Backend Security
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Instalar dependencias
+        run: npm ci
+      
+      - name: Escaneo de seguridad con Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/xss
+            p/sql-injection
+            p/command-injection
+            p/cwe-top-25
+            p/nodejs
+            p/express
+            p/typescript
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      
+      - name: Upload SARIF a GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+      
+      - name: Validar configuración de seguridad
+        run: |
+          echo "🔍 Validando configuración de seguridad del backend..."
+          
+          if grep -r "password\|secret\|token\|key" src/ --include="*.ts" --include="*.js" | grep -v "// " | grep -v "/* " | head -5; then
+            echo "⚠️ Posibles secrets hardcodeados encontrados"
+          else
+            echo "✅ No se detectaron secrets obvios hardcodeados"
+          fi
+          
+          if grep -r "cors" src/ --include="*.ts" --include="*.js" | grep -i "origin.*\*" | head -3; then
+            echo "⚠️ Configuración CORS permissiva detectada"
+          else
+            echo "✅ Configuración CORS parece segura"
+          fi
+          
+          if grep -r "helmet" src/ --include="*.ts" --include="*.js" > /dev/null; then
+            echo "✅ Helmet detectado - buenos headers de seguridad"
+          else
+            echo "⚠️ Considera usar helmet para headers de seguridad"
+          fi
+      
+      - name: Audit de dependencias
+        run: npm audit --audit-level moderate
+        continue-on-error: true
+      
+      - name: Escaneo con Snyk
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+      
+      - name: Reporte para PR
+        uses: actions/github-script@v3
+        if: failure()
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Semgrep detectó problemas de seguridad (Backend)**\n\nRevisa los detalles en la pestaña "Security" o en los logs del workflow.\n\n**Áreas críticas revisadas:**\n- Inyección SQL\n- Command injection\n- Vulnerabilidades Node.js/Express\n- Secrets expuestos\n- Configuración insegura'
+            });

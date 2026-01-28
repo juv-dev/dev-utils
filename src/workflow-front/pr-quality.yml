@@ -1,0 +1,31 @@
+name: PR - Frontend Quality
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Instalar dependencias
+        run: npm ci
+      
+      - name: Validar tipos
+        run: npm run type-check
+      
+      - name: Linting
+        run: npm run lint
+      
+      - name: Formato
+        run: npm run format:check

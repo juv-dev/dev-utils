@@ -1,0 +1,83 @@
+name: PR - Backend Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Instalar dependencias
+        run: npm ci
+      
+      - name: Pruebas unitarias con coverage
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ vars.USE_DATABASE == 'true' && 'postgresql://postgres:postgres@localhost:5432/test_db' || '' }}
+          REDIS_URL: ${{ vars.USE_DATABASE == 'true' && 'redis://localhost:6379' || '' }}
+        run: npm run test:unit -- --coverage --coverageReporters=json
+      
+      - name: Verificar coverage mínimo unitarias
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          echo "📊 Coverage unitarias: $COVERAGE%"
+          
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Coverage unitarias $COVERAGE% es menor al 80% requerido"
+            exit 1
+          fi
+          
+          echo "✅ Coverage unitarias $COVERAGE% cumple con el mínimo requerido"
+          echo "COVERAGE_UNIT=$COVERAGE" >> $GITHUB_ENV
+      
+      - name: Pruebas de integración con coverage
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ vars.USE_DATABASE == 'true' && 'postgresql://postgres:postgres@localhost:5432/test_db' || '' }}
+          REDIS_URL: ${{ vars.USE_DATABASE == 'true' && 'redis://localhost:6379' || '' }}
+        run: npm run test:integration -- --coverage --coverageReporters=json
+      
+      - name: Verificar coverage integración
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          echo "📊 Coverage integración: $COVERAGE%"
+          
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Coverage integración $COVERAGE% es menor al 80% requerido"
+            exit 1
+          fi
+          
+          echo "✅ Coverage integración $COVERAGE% cumple con el mínimo requerido"
+          echo "COVERAGE_INTEGRATION=$COVERAGE" >> $GITHUB_ENV
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: vars.UPLOAD_COVERAGE == 'true'
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+      
+      - name: Reporte para PR
+        uses: actions/github-script@v3
+        with:
+          script: |
+            const coverageUnit = process.env.COVERAGE_UNIT;
+            const coverageIntegration = process.env.COVERAGE_INTEGRATION;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧪 Reporte de Tests (Backend)\n\n✅ **Tests unitarios pasados**\n✅ **Tests de integración pasados**\n📊 **Coverage unitarias:** ${coverageUnit}%\n📊 **Coverage integración:** ${coverageIntegration}%\n\n🎯 **Estado:** Cumple con el mínimo del 80% requerido`
+            });

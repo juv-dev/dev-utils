@@ -1,0 +1,25 @@
+name: Branch Protection
+
+on:
+  push:
+    branches: [main, develop]
+
+jobs:
+  block-direct-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Bloquear push directo a ramas protegidas
+        run: |
+          echo "❌ ERROR: No se permite push directo a las ramas main/develop"
+          echo "🔄 Por favor, crea un Pull Request (PR) o Merge Request (MR)"
+          echo ""
+          echo "📋 Pasos correctos:"
+          echo "1. Crea una rama feature/fix/hotfix desde develop"
+          echo "2. Haz tus cambios en esa rama"
+          echo "3. Crea un PR hacia develop o main"
+          echo "4. Espera a que pasen todos los checks"
+          echo "5. Merge el PR"
+          echo ""
+          echo "🚀 Esto asegura calidad y revisión de código"
+          exit 1

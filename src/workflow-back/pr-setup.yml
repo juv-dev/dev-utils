@@ -1,0 +1,77 @@
+name: PR - Backend Setup
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    
+    # Opcional: Servicios Docker si USE_DATABASE=true
+    # services:
+    #   postgres:
+    #     image: postgres:15
+    #     env:
+    #       POSTGRES_PASSWORD: postgres
+    #       POSTGRES_DB: test_db
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 5432:5432
+    #   redis:
+    #     image: redis:7
+    #     options: >-
+    #       --health-cmd "redis-cli ping"
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 6379:6379
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Instalar dependencias
+        run: npm ci
+      
+      - name: Cargar variables de entorno
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ vars.USE_DATABASE == 'true' && 'postgresql://postgres:postgres@localhost:5432/test_db' || '' }}
+          REDIS_URL: ${{ vars.USE_DATABASE == 'true' && 'redis://localhost:6379' || '' }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          echo "NODE_ENV=$NODE_ENV" >> $GITHUB_ENV
+          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+          echo "REDIS_URL=$REDIS_URL" >> $GITHUB_ENV
+      
+      - name: Validar configuración
+        run: |
+          echo "🔍 Validando configuración del backend..."
+          if [ ! -f package.json ]; then
+            echo "❌ package.json no encontrado"
+            exit 1
+          fi
+          
+          if [ ! -f "src/main.ts" ] && [ ! -f "src/index.ts" ]; then
+            echo "⚠️ Archivo principal no encontrado"
+          fi
+          
+          if [ -f "tsconfig.json" ]; then
+            echo "✅ tsconfig.json encontrado"
+          fi
+          
+          if [ -f ".env.example" ]; then
+            echo "✅ .env.example encontrado"
+          fi
