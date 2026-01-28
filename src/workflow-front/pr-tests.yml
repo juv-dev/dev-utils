@@ -34,11 +34,24 @@ jobs:
       
       - name: Verificar coverage mínimo
         run: |
-          COVERAGE=$(cat coverage/coverage-summary.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          echo "🔍 Checking for coverage files..."
+          ls -la coverage/ || echo "No coverage directory found"
+          
+          if [ -f "coverage/coverage-summary.json" ]; then
+            COVERAGE=$(cat coverage/coverage-summary.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          elif [ -f "coverage/coverage.json" ]; then
+            COVERAGE=$(cat coverage/coverage.json | grep -o '"lines":{"pct":[0-9.]*' | grep -o '[0-9.]*' || echo "0")
+          else
+            echo "⚠️ No coverage summary file found, checking console output..."
+            COVERAGE=$(pnpm test:coverage 2>&1 | grep -o 'lines.*[0-9.]*%' | grep -o '[0-9.]*' | head -1 || echo "0")
+          fi
+          
           echo "📊 Coverage actual: $COVERAGE%"
           
           if (( $(echo "$COVERAGE < 80" | bc -l) )); then
             echo "❌ Coverage $COVERAGE% es menor al 80% requerido"
+            echo "📋 Available coverage files:"
+            find coverage/ -name "*.json" -o -name "*.txt" 2>/dev/null || echo "No coverage files found"
             exit 1
           fi
           
