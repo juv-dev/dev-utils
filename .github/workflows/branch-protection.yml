@@ -7,6 +7,7 @@ on:
 jobs:
   block-direct-push:
     runs-on: ubuntu-latest
+    if: "!startsWith(github.event.head_commit.message, 'Merge pull request') && !startsWith(github.event.head_commit.message, 'Automatic merge') && !contains(github.event.head_commit.message, 'Merge branch')"
     
     steps:
       - name: Bloquear push directo a ramas protegidas
