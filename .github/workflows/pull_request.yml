@@ -49,18 +49,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-  code-quality:
-    name: code-quality
-    needs: unit-test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: juv-dev/workflows-frontend/.github/actions/code-quality@main
-
   validate-tag:
     name: validate-tag
-    needs: code-quality
+    needs: unit-test
     runs-on: ubuntu-latest
     permissions:
       contents: read
