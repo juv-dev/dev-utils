@@ -1,24 +1,23 @@
-# Define los paquetes que forman parte del workspace
 packages:
-  - '.'  # Incluye el directorio raíz como un paquete
-  # - 'packages/*'  # Descomenta si tienes paquetes en una carpeta 'packages/'
-  # - 'apps/*'      # Descomenta si tienes aplicaciones en una carpeta 'apps/'
+  - .
 
-# Configuración de pnpm
-pnpm:
-  # Tiempo mínimo (en minutos) que un paquete debe estar publicado
-  # antes de ser considerado estable (24 horas = 1440 minutos)
-  minimum-release-age: 1440
+allowBuilds:
+  esbuild: true
 
-# Dependencias que deben ser ignoradas al construir el proyecto
-ignoredBuiltDependencies:
-  - esbuild      # Ignora esbuild para evitar conflictos
-  - vue-demi     # Ignora vue-demi (común en paquetes de Vue)
-  - vue          # Añade vue si es necesario
-  - typescript   # Añade typescript si es necesario
+overrides:
+  brace-expansion: "2.1.0"
+  minimatch: "9.0.9"
+  postcss: "8.5.15"
+  js-cookie: "3.0.7"
+  ws: "8.21.0"
+  ajv: "8.20.0"
+  flatted: "3.4.2"
+  picomatch: "4.0.4"
+  rollup: "4.60.4"
+  vite: "7.3.3"
 
-# Configuración de resolución de dependencias
-node-linker: hoisted  # Similar a shamefully-hoist=true
-prefer-frozen-lockfile: true  # Usa el lockfile si está actualizado
-resolution-mode: highest  # Usa la versión más alta de los paquetes
-strict-peer-dependencies: false  # Permite continuar con advertencias de peer deps
+minimumReleaseAge: 4320
+minimumReleaseAgeExclude:
+  - ws
+blockExoticSubdeps: true
+strictDepBuilds: true

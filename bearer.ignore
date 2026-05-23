@@ -1,0 +1,12 @@
+{
+  "feca976ba5eaec11a2ca02d723121990_0": {
+    "author": "juv-dev",
+    "comment": "Build script in src/main.ts. fs.mkdirSync uses computed local output path, not user-controlled input — false positive.",
+    "ignored_at": "2026-05-23T09:00:00.000Z"
+  },
+  "feca976ba5eaec11a2ca02d723121990_1": {
+    "author": "juv-dev",
+    "comment": "Build script in src/main.ts. fs.readdirSync uses computed local root path, not user-controlled input — false positive.",
+    "ignored_at": "2026-05-23T09:00:00.000Z"
+  }
+}
